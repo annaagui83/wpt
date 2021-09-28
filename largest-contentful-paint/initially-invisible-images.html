@@ -1,0 +1,57 @@
+<!DOCTYPE HTML>
+<head>
+<title>Largest Contentful Paint: invisible images are not observable</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<style>
+  .flex-container {
+     display: flex;
+     flex-direction: row;
+     width: 1000px;
+     overflow-x: hidden;
+     scroll-behavior: auto;
+  }
+</style>
+</head>
+<body>
+<div>
+<div class='flex-container' id="container">
+  <img src='/images/yellow.png?pipe=trickle(d1)' width="1000" height="1000"/>
+  <img src='/images/green-1x1.png?1' width="1000" height="1000"/>
+  <img src='/images/green-1x1.png?2' width="1000" height="1000"/>
+  <img src='/images/green-1x1.png?3' width="1000" height="1000"/>
+</div>
+</div>
+<script>
+// Spin the carousel
+const images = document.querySelectorAll('img');
+
+let selected = 0;
+const transition = () => {
+  document.getElementById("container").scrollLeft = selected * 1000;
+  selected = (selected + 1) % images.length;
+}
+
+setInterval(transition, 1000);
+
+promise_test(async t => {
+  document.getElementById("container").scrollLeft=1000;
+
+  return new Promise(resolve => {
+    assert_implements(window.LargestContentfulPaint,
+                      "LargestContentfulPaint is not implemented");
+    const observer = new PerformanceObserver(entryList => {
+      entryList.getEntries().forEach(entry => {
+        // May receive a text entry. Ignore that entry.
+        if (!entry.url) {
+          return;
+        }
+        assert_true(entry.url.includes("yellow.png"), "Re-visible image has an entry");
+        resolve();
+      });
+    });
+    observer.observe({type: 'largest-contentful-paint', buffered: true});
+  });
+}, 'Image visibility: hidden that was removed is observable by LargestContentfulPaint.');
+</script>
+</body>
