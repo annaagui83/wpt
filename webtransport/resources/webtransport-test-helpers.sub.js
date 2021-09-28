@@ -5,6 +5,8 @@ const HOST = get_host_info().ORIGINAL_HOST;
 const PORT = '{{ports[webtransport-h3][0]}}';
 const BASE = `https://${HOST}:${PORT}`;
 
+function wait(ms) { return new Promise(res => step_timeout(res, ms)); }
+
 // Create URL for WebTransport session.
 function webtransport_url(handler) {
   return `${BASE}/webtransport/handlers/${handler}`;
@@ -54,3 +56,35 @@ function check_and_remove_standard_headers(headers) {
   assert_equals(headers['datagram-flow-id'], '0');
   delete headers['datagram-flow-id'];
 }
+
+// Write datagrams until the producer receives the AbortSignal.
+async function write_datagrams(writer, signal) {
+  const encoder = new TextEncoder();
+  let counter = 0;
+  const sentTokens = [];
+  while (true) {
+    await writer.ready;
+    var token = counter.toString();
+    sentTokens.push(token);
+    writer.write(encoder.encode(token));
+    counter++;
+    if (signal.aborted) {
+      break;
+    }
+  }
+  return sentTokens;
+}
+
+// Read datagrams until the consumer has received enough i.e. N datagrams.
+async function read_datagrams(reader, controller, N) {
+  const decoder = new TextDecoder();
+  const receivedTokens = [];
+  while (receivedTokens.length < N) {
+    const { value: token, done } = await reader.read();
+    assert_equals(done, false);
+    receivedTokens.push(decoder.decode(token));
+  }
+  controller.abort();
+  return receivedTokens;
+}
+
